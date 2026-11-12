@@ -1,5 +1,10 @@
 # Implementation Status
 
+This document records the **schema-1 baseline audit**. The later pi0.5-only
+schema-2 request-stream implementation and its different residency, address
+lifetime, and operator support are described in [PI05_STREAM.md](PI05_STREAM.md).
+Schema-1 limitations below remain applicable to the original GEMM-chain entry point.
+
 Audit date: 2026-11-13. This is a software implementation audit, not calibration
 against another accelerator, RTL, or silicon. No fitted correction factors were
 introduced. The pre-audit published integration revision was `75c2165`.

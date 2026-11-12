@@ -26,12 +26,26 @@ This is an architecture exploration model, not a hardware-calibrated simulator.
 See [docs/STATUS.md](docs/STATUS.md) for the implementation audit, current boundaries,
 and improvement priorities.
 
-**Current workload frontend:** chains of dense GEMMs, including tail tiles, pipeline
-stages, microbatches, and repeated steps. The DiT-like example is an expand/contract
-GEMM workload for memory experiments, **not a complete DiT implementation**. Attention,
-normalization, residuals, timestep conditioning, KV caches, and arbitrary NeuSim
-model-graph import are not yet implemented. NeuSim itself supports more operators
-than this first co-simulation frontend.
+**Workload frontends:** schema 1 retains the original dense GEMM-chain regression
+examples. Schema 2 adds a **pi0.5-only shape/traffic request stream**, including
+vision/prefix/expert GEMMs, dense attention, per-request prefix KV, estimated vector
+work, bounded weight-tile residency, and timestep-stage microbatching. It is not
+numerical OpenPI execution or a validated compiler mapping. See
+[docs/PI05_STREAM.md](docs/PI05_STREAM.md) for the exact scope and
+[docs/EXPERIMENT_PLAN.md](docs/EXPERIMENT_PLAN.md) for the staged experiment gates.
+
+On Deep-space, submit tests and experiments through Slurm from the repository root:
+
+```bash
+mkdir -p results
+sbatch scripts/slurm_validate.sh
+sbatch --array=0-1 scripts/slurm_profile.sh
+```
+
+The tiny stream is a correctness fixture, not a pi0.5 performance prediction.
+The full-size profile stops at a fixed tick budget and explicitly does not report
+end-to-end latency or throughput. Do not launch the full DSE before its runtime and
+baseline gates pass.
 
 ## Quick Start
 
@@ -110,12 +124,14 @@ by the adapter; the official memory/controller implementations are unchanged.
 The adapter also rejects requests outside the configured addressable DRAM capacity.
 Capacity is derived from the resolved organization, transaction size, and prefetch
 factor, including pseudochannels. A workload that exceeds it fails explicitly
-instead of silently wrapping the address mapping. There is no DRAM allocator reuse
-between stages, microbatches, or steps yet.
+instead of silently wrapping the address mapping. The legacy schema-1 allocator
+does not recycle intermediates. The schema-2 stream has bounded request slots and
+stage-local scratch arenas with last-use recycling at operator barriers.
 
 ## Configuration
 
-See `examples/two_core_pipeline.json` for the complete schema.
+The table below describes **schema 1**. See `examples/two_core_pipeline.json` for
+that schema, and `examples/pi05_pilot.json` for the separate schema-2 stream.
 
 | Field | Meaning |
 | --- | --- |

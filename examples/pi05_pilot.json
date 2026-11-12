@@ -1,0 +1,23 @@
+{
+  "schema_version": 2,
+  "dram": {"standard": "HBM3", "channels": 16},
+  "hardware": {
+    "chip": {"num_sa": 1, "num_vu": 1, "sa_dim": 32, "freq_GHz": 1.0},
+    "sram_bytes_per_core": 1048576,
+    "weight_cache_bytes_per_core": 262144,
+    "prefetch_tiles": 2,
+    "max_outstanding": 64,
+    "vector_elements_per_cycle": 32,
+    "tile_mnk": [128, 128, 128]
+  },
+  "workload": {
+    "kind": "pi05",
+    "stage_cores": [16, 16],
+    "microbatch": 2,
+    "max_inflight": 8,
+    "warmup_requests": 4,
+    "measure_requests": 8,
+    "shape": {}
+  },
+  "simulation": {"issue_width": 16, "max_cycles": 1000000000, "operator_overhead_ns": 0}
+}

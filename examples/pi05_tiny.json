@@ -1,0 +1,29 @@
+{
+  "schema_version": 2,
+  "dram": {"standard": "HBM3", "channels": 2},
+  "hardware": {
+    "chip": {"num_sa": 1, "num_vu": 1, "sa_dim": 32, "freq_GHz": 1.0},
+    "sram_bytes_per_core": 8192,
+    "weight_cache_bytes_per_core": 2048,
+    "prefetch_tiles": 2,
+    "max_outstanding": 16,
+    "vector_elements_per_cycle": 32,
+    "tile_mnk": [4, 4, 4]
+  },
+  "workload": {
+    "kind": "pi05",
+    "stage_cores": [1, 1, 1],
+    "microbatch": 2,
+    "max_inflight": 4,
+    "warmup_requests": 2,
+    "measure_requests": 4,
+    "shape": {
+      "images": 1, "image_tokens": 4, "text_tokens": 2, "patch_features": 12,
+      "vision_width": 8, "vision_mlp": 16, "vision_layers": 1, "vision_heads": 2,
+      "prefix_width": 8, "prefix_mlp": 16, "layers": 1,
+      "expert_width": 8, "expert_mlp": 16, "heads": 2, "head_dim": 4,
+      "action_tokens": 2, "action_dim": 4, "steps": 2
+    }
+  },
+  "simulation": {"issue_width": 8, "max_cycles": 2000000, "operator_overhead_ns": 0}
+}

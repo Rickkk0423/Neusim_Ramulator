@@ -141,6 +141,38 @@ def test_closed_instance_raises_instead_of_crashing(tmp_path):
             operation()
 
 
+def test_real_pi05_stream_and_native_idle_equivalence(tmp_path):
+    from neusim_ramulator.stream import StreamSimulator
+    config = json.loads((ROOT / "examples/pi05_tiny.json").read_text())
+    config["simulation"]["operator_overhead_ns"] = 100
+    dram_path = tmp_path / "dram.yaml"
+    export_config(config["dram"], dram_path, sum(config["workload"]["stage_cores"]))
+    reports = []
+    for batching in (False, True):
+        config["simulation"]["active_core_polling"] = batching
+        with Ramulator(dram_path) as memory:
+            if not batching:
+                memory.advance = None
+            reports.append(StreamSimulator(config, memory).run())
+    assert reports[1]["native_idle_ticks"] > 0
+    for report in reports:
+        report.pop("native_idle_ticks")
+    assert reports[0] == reports[1]
+
+
+def test_native_advance_argument_validation(tmp_path):
+    path = tmp_path / "dram.yaml"
+    export_config({"standard": "HBM3"}, path)
+    with Ramulator(path) as memory:
+        for count in (0, -1, True, 2**64):
+            with pytest.raises(ValueError):
+                memory.advance(count)
+        memory.advance(100)
+        assert memory.send(0, False, 0, 0)
+        memory.advance(2000)
+        assert [request for request, _ in memory.completions()] == [0]
+
+
 def test_rerun_removes_stale_trace_and_preserves_unrelated_files(tmp_path):
     for name in ARTIFACTS:
         (tmp_path / name).write_text("stale")

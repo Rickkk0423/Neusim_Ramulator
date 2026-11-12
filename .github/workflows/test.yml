@@ -16,3 +16,5 @@ jobs:
       - run: python -m pytest -q
       - run: python -m neusim_ramulator.cli examples/four_core_hbm.json -o results/hbm
       - run: python -m neusim_ramulator.cli examples/dit_like_batch.json -o results/dit
+      - run: python -m neusim_ramulator.stream_cli examples/pi05_tiny.json -o results/pi05-tiny
+      - run: python -m neusim_ramulator.stream_cli examples/pi05_pilot.json --describe-only

@@ -133,6 +133,14 @@ class Ramulator:
         self._require_open()
         self._check(self.lib.nr_tick(self.handle, 1))
 
+    def advance(self, cycles: int) -> None:
+        """Run real DRAM ticks in native code; caller must preserve feedback events."""
+        self._require_open()
+        self._integer(cycles, "cycles", 2**64)
+        if cycles == 0:
+            raise ValueError("cycles must be positive")
+        self._check(self.lib.nr_tick(self.handle, cycles))
+
     def completions(self) -> list[tuple[int, int]]:
         self._require_open()
         events = []
