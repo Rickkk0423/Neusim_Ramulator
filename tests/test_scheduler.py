@@ -1,7 +1,5 @@
 """Deterministic unit backend for causality; real DRAM tests are separate."""
 
-from dataclasses import replace
-
 import pytest
 
 from neusim_ramulator.scheduler import Scheduler

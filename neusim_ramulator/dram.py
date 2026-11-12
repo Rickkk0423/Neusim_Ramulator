@@ -9,7 +9,7 @@ import yaml
 from .upstream import ROOT, add_upstream
 
 
-def export_config(config: dict, output: Path) -> None:
+def export_config(config: dict, output: Path, num_cores: int = 1) -> None:
     add_upstream("RAMULATOR_ROOT", "third_party/ramulator2/python")
     import ramulator as ram
 
@@ -33,9 +33,12 @@ def export_config(config: dict, output: Path) -> None:
             dram=dram, scheduler=ram.scheduler.FRFCFS(),
             row_policy=ram.row_policy.Open(), addr_mapper=ram.addr_mapper.RoBaRaCoCh(),
         )
-        # HBM controllers select the standard's refresh implementation by default.
         if standard == "DDR4":
             kwargs["refresh_manager"] = ram.refresh_manager.AllBank()
+        elif standard == "HBM2":
+            kwargs["refresh_manager"] = ram.refresh_manager.HBMPerBankRefresh()
+        else:
+            kwargs["refresh_manager"] = ram.refresh_manager.HBM34PerBankRefresh()
         controllers.append(controller_class(**kwargs))
     memory = ram.memory_system.GenericDRAM(
         clock_ratio=1, controllers=controllers,
@@ -43,7 +46,7 @@ def export_config(config: dict, output: Path) -> None:
     )
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(yaml.safe_dump({
-        "frontend": {"impl": "External", "clock_ratio": 1},
+        "frontend": {"impl": "NeuSimExternal", "num_cores": num_cores},
         "memory_system": memory.to_config(),
     }, sort_keys=False))
 

@@ -98,6 +98,12 @@ active transfers; rejection in one stream does not block every other stream. The
 DRAM controller still applies its own FRFCFS scheduling. Injection arbitration is
 an explicit modeled policy, not an assertion about a particular hardware DMA.
 
+The bridge registers a `NeuSimExternal` frontend implementing the official external
+request interface and reporting the actual core count. Upstream's `External`
+frontend reports one core, which is insufficient for its controllers' per-source
+statistics arrays when injecting multiple source IDs. Source IDs are bounds-checked
+by the adapter; the official memory/controller implementations are unchanged.
+
 ## Configuration
 
 See `examples/two_core_pipeline.json` for the complete schema.
@@ -146,13 +152,17 @@ precision-dependent throughput: NeuSim's compute abstraction does not model that
 - `config.json`, `dram.yaml`: the input and fully expanded DRAM configuration.
 - `error.json`: a failure diagnostic if execution fails after output initialization.
 
-Bandwidth is physical transaction bytes / whole-run makespan (decimal GB/s).
+Bandwidth is accepted interface-transaction bytes / whole-run makespan (decimal GB/s).
+It is effective interface throughput, not necessarily physical DRAM-bus throughput:
+the controller may forward reads or coalesce writes. Official command-service
+counters in `dram_stats.yaml` distinguish these cases.
 Logical tensor bytes are also reported separately. Request latency starts at
 acceptance, not first attempted submission. `input_wait_cycles` counts idle-compute
 cycles with an active input transfer; `capacity_blocked_cycles` counts cycles with
 a dependency-ready admission blocked by SRAM. These counters can overlap and are
-not an additive decomposition of makespan. `samples_per_second` includes every
-configured repeated step. Microbatch completion timestamps support throughput and
+not an additive decomposition of makespan. `samples_per_second` counts completed
+samples over the full multi-step run; repeated steps are not extra samples.
+Microbatch completion timestamps support throughput and
 latency analysis; there is no claim that a short run has reached steady state.
 
 ## Modeling Boundaries
@@ -189,7 +199,7 @@ latency analysis; there is no claim that a short run has reached steady state.
 
 Unit tests use a deterministic memory stub **only to test scheduler invariants**.
 Runtime/CLI always uses the real Ramulator bridge. Integration tests run DDR4,
-HBM2, HBM3, and an online two-core pipeline. Other tests exercise the actual NeuSim
+HBM2, HBM3, and online two-core DDR4 / four-core HBM pipelines. Other tests exercise the actual NeuSim
 compute path, tail shapes, K reduction, step/stage dependencies, resource limits,
 queue rejection, out-of-order completions, and propagation of memory delay into
 future request times. Integration tests skip if the native bridge is absent;
@@ -210,3 +220,17 @@ unchanged. Upstream FetchContent resolves fmt `10.2.1` and yaml-cpp `0.9.0`.
 Integration code is Apache-2.0. Upstream sources retain their own licenses. See
 `NOTICE` and each submodule's license/citation instructions. This project does not
 claim upstream authorship, endorsement, RTL validation, or silicon calibration.
+
+## Linux Servers
+
+Use a project-local virtual environment; no root privileges are needed. On RHEL 9,
+`scripts/setup.sh` automatically chooses GCC Toolset 14 if present. If Python 3.12
+is not on the non-interactive SSH PATH, pass its absolute path:
+
+```bash
+PYTHON=/path/to/python3.12 BUILD_JOBS=4 ./scripts/setup.sh
+```
+
+Keep build directories and virtual environments local to each machine. Transfer
+source with Git/submodules, not macOS binaries or `.venv` directories. Validation
+results and their environment are recorded in [docs/VALIDATION.md](docs/VALIDATION.md).

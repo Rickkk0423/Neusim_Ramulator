@@ -29,7 +29,7 @@ def run(config_path: Path, output: Path, request_trace: bool = False, library=No
         (output / name).unlink(missing_ok=True)
     (output / "config.json").write_text(json.dumps(config, indent=2) + "\n")
     dram_config = output / "dram.yaml"
-    export_config(config.get("dram", {}), dram_config)
+    export_config(config.get("dram", {}), dram_config, num_cores=len(config["cores"]))
     trace_file = None
     try:
         sink = None

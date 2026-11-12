@@ -10,6 +10,36 @@
 #include "ramulator/frontend/i_frontend.h"
 #include "ramulator/memory_system/i_memory_system.h"
 
+namespace Ramulator {
+// The upstream External frontend reports one source. Controllers size their
+// per-source statistics from get_num_cores(), so multi-core traffic needs this
+// small frontend adapter rather than passing out-of-range source IDs.
+class NeuSimExternal : public IFrontEnd, public Implementation {
+  RAMULATOR_REGISTER_IMPLEMENTATION(IFrontEnd, NeuSimExternal, "NeuSimExternal")
+
+  int cores = 1;
+
+ public:
+  void init() override {
+    m_clock_ratio = 1;
+    cores = ParamReader<int>{m_config, "num_cores", m_name}.required();
+    if (cores < 1) throw std::runtime_error("num_cores must be positive");
+  }
+  void tick() override {}
+  bool is_finished() override { return false; }
+  int get_num_cores() override { return cores; }
+  bool receive_external_requests(int type, Addr_t address, int source,
+                                 std::function<void(Request&)> callback,
+                                 int bytes) override {
+    if (source < 0 || source >= cores)
+      throw std::runtime_error("Source ID exceeds the configured frontend core count");
+    Request request(address, type, source, std::move(callback));
+    request.size_bytes = bytes;
+    return m_memory_system->send(request);
+  }
+};
+}  // namespace Ramulator
+
 namespace {
 struct Completion {
   uint64_t id;
