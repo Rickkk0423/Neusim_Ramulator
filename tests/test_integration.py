@@ -1,11 +1,12 @@
 """Real official Ramulator DRAM, not the deterministic unit-test memory."""
 
 import csv
+import json
 import sys
 
 import pytest
 
-from neusim_ramulator.cli import run
+from neusim_ramulator.cli import ARTIFACTS, run
 from neusim_ramulator.dram import Ramulator, export_config
 from neusim_ramulator.upstream import ROOT
 
@@ -97,3 +98,87 @@ def test_source_ids_are_bounds_checked(tmp_path):
     with Ramulator(config) as memory:
         with pytest.raises(RuntimeError, match="Source ID"):
             memory.send(0, False, 0, 1)
+
+
+@pytest.mark.parametrize("standard,capacity", [
+    ("DDR4", 8 * 2**30), ("HBM2", 512 * 2**20), ("HBM3", 2**30),
+])
+def test_capacity_matches_address_mapper_and_rejects_overflow(standard, capacity, tmp_path):
+    config = tmp_path / "dram.yaml"
+    export_config({"standard": standard}, config)
+    with Ramulator(config) as memory:
+        assert memory.capacity_bytes == capacity
+        assert memory.send(0, False, capacity - memory.tx_bytes, 0)
+        with pytest.raises(RuntimeError, match="DRAM address capacity"):
+            memory.send(1, False, capacity, 0)
+
+
+@pytest.mark.parametrize("field,value", [
+    ("address", 2**64), ("address", -1), ("address", True),
+    ("request_id", -1), ("request_id", 2**64), ("core", 2**32),
+])
+def test_python_integers_do_not_silently_wrap(field, value, tmp_path):
+    config = tmp_path / "dram.yaml"
+    export_config({"standard": "DDR4"}, config)
+    with Ramulator(config) as memory:
+        request = dict(request_id=0, write=False, address=0, core=0)
+        request[field] = value
+        with pytest.raises(ValueError, match=field):
+            memory.send(**request)
+
+
+def test_closed_instance_raises_instead_of_crashing(tmp_path):
+    config = tmp_path / "dram.yaml"
+    export_config({"standard": "DDR4"}, config)
+    memory = Ramulator(config)
+    memory.close()
+    memory.close()
+    operations = [memory.tick, memory.completions, memory.__enter__,
+                  lambda: memory.send(0, False, 0, 0),
+                  lambda: memory.finalize(tmp_path / "stats.yaml")]
+    for operation in operations:
+        with pytest.raises(RuntimeError, match="closed"):
+            operation()
+
+
+def test_rerun_removes_stale_trace_and_preserves_unrelated_files(tmp_path):
+    for name in ARTIFACTS:
+        (tmp_path / name).write_text("stale")
+    (tmp_path / "notes.txt").write_text("keep")
+    run(ROOT / "examples/two_core_pipeline.json", tmp_path)
+    assert not (tmp_path / "requests.csv").exists()
+    assert not (tmp_path / "error.json").exists()
+    assert (tmp_path / "notes.txt").read_text() == "keep"
+    assert (tmp_path / "tiles.csv").read_text() != "stale"
+    # A saved input snapshot is also a valid rerun input.
+    run(tmp_path / "config.json", tmp_path)
+
+
+@pytest.mark.parametrize("invalid_json", [False, True])
+def test_failed_rerun_does_not_leave_success_from_previous_run(invalid_json, tmp_path):
+    for name in ARTIFACTS:
+        (tmp_path / name).write_text("stale")
+    source = tmp_path / "input.json"
+    source.write_text("{" if invalid_json else '{"schema_version": 0}')
+    with pytest.raises(ValueError):
+        run(source, tmp_path)
+    assert "error" in json.loads((tmp_path / "error.json").read_text())
+    for name in ("summary.json", "tiles.csv", "requests.csv", "dram_stats.yaml", "dram.yaml"):
+        assert not (tmp_path / name).exists()
+
+
+def test_cli_rejects_workload_exceeding_memory_capacity(monkeypatch, tmp_path):
+    from neusim_ramulator import cli
+
+    build = cli.build_plan
+
+    def oversized(config):
+        tiles, metadata = build(config)
+        metadata["address_space_bytes"] = 2**50
+        return tiles, metadata
+
+    monkeypatch.setattr(cli, "build_plan", oversized)
+    with pytest.raises(ValueError, match="exceeds DRAM capacity"):
+        run(ROOT / "examples/two_core_pipeline.json", tmp_path)
+    assert not (tmp_path / "summary.json").exists()
+    assert (tmp_path / "error.json").exists()

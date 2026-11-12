@@ -12,6 +12,9 @@ from .scheduler import Scheduler
 from .upstream import ROOT
 from .workload import build_plan
 
+ARTIFACTS = ("summary.json", "error.json", "config.json", "dram.yaml", "tiles.csv",
+             "requests.csv", "dram_stats.yaml")
+
 
 def revision(path: Path) -> str:
     try:
@@ -21,17 +24,28 @@ def revision(path: Path) -> str:
         return "unknown"
 
 
+def source_dirty(path: Path) -> bool | None:
+    try:
+        return bool(subprocess.check_output(
+            ["git", "-C", str(path), "status", "--porcelain", "--untracked-files=no",
+             "--ignore-submodules=untracked"], text=True, stderr=subprocess.DEVNULL).strip())
+    except (OSError, subprocess.CalledProcessError):
+        return None
+
+
 def run(config_path: Path, output: Path, request_trace: bool = False, library=None) -> dict:
-    config = json.loads(config_path.read_text())
-    tiles, metadata = build_plan(config)
+    # Read before cleanup so the saved config can itself be used as the input.
+    config_text = config_path.read_text()
     output.mkdir(parents=True, exist_ok=True)
-    for name in ("summary.json", "error.json"):
+    for name in ARTIFACTS:
         (output / name).unlink(missing_ok=True)
-    (output / "config.json").write_text(json.dumps(config, indent=2) + "\n")
-    dram_config = output / "dram.yaml"
-    export_config(config.get("dram", {}), dram_config, num_cores=len(config["cores"]))
     trace_file = None
     try:
+        config = json.loads(config_text)
+        (output / "config.json").write_text(json.dumps(config, indent=2) + "\n")
+        tiles, metadata = build_plan(config)
+        dram_config = output / "dram.yaml"
+        export_config(config.get("dram", {}), dram_config, num_cores=len(config["cores"]))
         sink = None
         if request_trace:
             trace_file = (output / "requests.csv").open("w", newline="")
@@ -40,6 +54,10 @@ def run(config_path: Path, output: Path, request_trace: bool = False, library=No
             writer.writeheader()
             sink = writer.writerow
         with Ramulator(dram_config, library) as memory:
+            if metadata["address_space_bytes"] > memory.capacity_bytes:
+                raise ValueError(
+                    f"Workload address space ({metadata['address_space_bytes']} bytes) exceeds "
+                    f"DRAM capacity ({memory.capacity_bytes} bytes); address reuse is not modeled")
             simulation = config.get("simulation", {})
             scheduler = Scheduler(tiles, config["cores"], memory,
                                   issue_width=simulation.get("issue_width", 4),
@@ -54,11 +72,11 @@ def run(config_path: Path, output: Path, request_trace: bool = False, library=No
             writer.writeheader()
             writer.writerows(report.pop("tiles"))
         report["workload"] = metadata
-        report["revisions"] = {
-            "integration": revision(ROOT),
-            "NeuSim": revision(ROOT / "third_party/NeuSim"),
-            "ramulator2": revision(ROOT / "third_party/ramulator2"),
-        }
+        report["dram_capacity_bytes"] = memory.capacity_bytes
+        sources = {"integration": ROOT, "NeuSim": ROOT / "third_party/NeuSim",
+                   "ramulator2": ROOT / "third_party/ramulator2"}
+        report["revisions"] = {name: revision(path) for name, path in sources.items()}
+        report["source_dirty"] = {name: source_dirty(path) for name, path in sources.items()}
         report["model"] = {
             "compute": "official NeuSim compute functions, per GEMM K slice",
             "memory": "one live official Ramulator instance shared by all cores",
@@ -93,7 +111,8 @@ def main():
         print(f"Simulation failed: {error}", file=sys.stderr)
         raise SystemExit(1)
     print(f"Completed {report['workload']['tiles']} tiles in {report['cycles']} DRAM cycles")
-    print(f"Makespan: {report['makespan_ns']:.3f} ns; DRAM: {report['total_bandwidth_GBps']:.3f} GB/s")
+    print(f"Makespan: {report['makespan_ns']:.3f} ns; "
+          f"interface throughput: {report['total_bandwidth_GBps']:.3f} GB/s")
     print(f"Reports: {args.output.resolve()}")
 
 

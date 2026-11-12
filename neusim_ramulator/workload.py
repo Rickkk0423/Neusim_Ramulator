@@ -1,8 +1,6 @@
 """Explicit GEMM tile plans, physical byte ranges, and producer dependencies."""
 
 from dataclasses import dataclass
-from math import ceil
-
 from .compute import NeuSimCompute
 
 DTYPES = {"BFLOAT16": 2, "FLOAT16": 2, "FLOAT32": 4, "INT8": 1}
@@ -32,7 +30,7 @@ class Region:
             start = self.base + row * self.stride_bytes
             end = start + self.columns * self.element_bytes
             addresses.update(range(start // tx_bytes * tx_bytes,
-                                   ceil(end / tx_bytes) * tx_bytes, tx_bytes))
+                                   (end + tx_bytes - 1) // tx_bytes * tx_bytes, tx_bytes))
         return sorted(addresses)
 
 
@@ -92,7 +90,9 @@ def validate(config: dict) -> None:
         positive(work.get(name), f"workload.{name}")
     if work.get("dtype", "BFLOAT16") not in DTYPES:
         raise ValueError(f"dtype must be one of {list(DTYPES)}")
-    positive(work.get("accumulator_bytes", 4), "accumulator_bytes")
+    accumulator = positive(work.get("accumulator_bytes", 4), "accumulator_bytes")
+    if accumulator < DTYPES[work.get("dtype", "BFLOAT16")]:
+        raise ValueError("accumulator_bytes must fit at least one output element")
     if len(work.get("tile", [])) != 3:
         raise ValueError("tile must be [M, N, K]")
     for value in work["tile"]:
@@ -126,14 +126,14 @@ def build_plan(config: dict) -> tuple[list[Tile], dict]:
     def allocate(size: int) -> int:
         nonlocal next_address
         base = next_address
-        next_address += ceil(size / 4096) * 4096
+        next_address += (size + 4095) // 4096 * 4096
         if next_address >= 2**63:
             raise ValueError("Workload exceeds the signed 64-bit address space")
         return base
 
     weights = [allocate(stage["k"] * stage["n"] * element_bytes) for stage in stages]
     tiles = []
-    batches = ceil(work["batch_size"] / work["microbatch_size"])
+    batches = (work["batch_size"] + work["microbatch_size"] - 1) // work["microbatch_size"]
     for microbatch in range(batches):
         samples = min(work["microbatch_size"],
                       work["batch_size"] - microbatch * work["microbatch_size"])

@@ -18,6 +18,12 @@ def test_byte_ranges_and_transaction_coalescing():
     assert Region(63, 1, 2, 4, 2).transactions(64) == [0, 64]
 
 
+def test_transaction_alignment_is_exact_above_float_precision():
+    base = 2**60
+    assert Region(base, 1, 1, 1, 1).transactions(64) == [base]
+    assert Region(base + 63, 1, 2, 2, 1).transactions(64) == [base, base + 64]
+
+
 def test_k_partial_sums_and_cross_stage_dependencies():
     tiles, metadata = build_plan(config())
     assert metadata["microbatches"] == 3
@@ -58,6 +64,7 @@ def test_steps_depend_on_prior_step_outputs():
     lambda c: c["workload"]["stages"][1].update(k=127),
     lambda c: c["cores"][0].update(sram_bytes=1),
     lambda c: c["cores"][0].update(max_outstanding=-1),
+    lambda c: c["workload"].update(accumulator_bytes=1),
 ])
 def test_invalid_configs_fail(mutate):
     cfg = deepcopy(config())

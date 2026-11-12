@@ -62,3 +62,17 @@ Each run emits configuration snapshots, upstream/source revisions, tile timing,
 optional transaction traces, and official DRAM statistics. Large generated traces
 are deliberately excluded from Git. GitHub Actions independently builds/tests on
 Ubuntu; the Linux results above do not imply a particular CI run has passed.
+
+## Implementation Audit: 2026-11-13
+
+The same Linux environment rebuilt the bridge after the implementation audit.
+Result: **55 passed**, with no skipped tests; 22 tests use the real native backend.
+The added scheduler regression also sweeps 50 seeded tight-SRAM GEMM-chain plans.
+An exploratory 150-plan seeded sweep completed separately before that regression
+was added. These are software consistency checks, not hardware calibration.
+
+New coverage checks exact large-address arithmetic, DRAM capacity and integer
+boundaries, safe use-after-close errors, stale-output removal, failed-rerun
+diagnostics, and invalid accumulator/channel/core settings. See `STATUS.md` for
+the full findings and remaining model limits. Raw reports and test output are
+removed after validation; CI no longer persists example reports as artifacts.

@@ -18,21 +18,29 @@ class NeuSimExternal : public IFrontEnd, public Implementation {
   RAMULATOR_REGISTER_IMPLEMENTATION(IFrontEnd, NeuSimExternal, "NeuSimExternal")
 
   int cores = 1;
+  uint64_t capacity = 0;
 
  public:
   void init() override {
     m_clock_ratio = 1;
     cores = ParamReader<int>{m_config, "num_cores", m_name}.required();
     if (cores < 1) throw std::runtime_error("num_cores must be positive");
+    const auto bytes = ParamReader<int64_t>{m_config, "address_capacity_bytes", m_name}.required();
+    if (bytes <= 0) throw std::runtime_error("address_capacity_bytes must be positive");
+    capacity = static_cast<uint64_t>(bytes);
   }
   void tick() override {}
   bool is_finished() override { return false; }
   int get_num_cores() override { return cores; }
+  uint64_t get_capacity_bytes() const { return capacity; }
   bool receive_external_requests(int type, Addr_t address, int source,
                                  std::function<void(Request&)> callback,
                                  int bytes) override {
     if (source < 0 || source >= cores)
       throw std::runtime_error("Source ID exceeds the configured frontend core count");
+    if (bytes <= 0 || static_cast<uint64_t>(bytes) > capacity || address < 0 ||
+        static_cast<uint64_t>(address) > capacity - static_cast<uint64_t>(bytes))
+      throw std::runtime_error("Request exceeds configured DRAM address capacity");
     Request request(address, type, source, std::move(callback));
     request.size_bytes = bytes;
     return m_memory_system->send(request);
@@ -51,6 +59,7 @@ struct Engine {
   std::unique_ptr<Ramulator::IMemorySystem> memory;
   std::deque<Completion> completions;
   uint64_t cycle = 0;
+  uint64_t capacity = 0;
   bool finalized = false;
 };
 thread_local std::string last_error;
@@ -70,6 +79,7 @@ template <class F> int checked(F function) {
 }  // namespace
 
 extern "C" {
+int nr_abi_version() { return 2; }
 const char* nr_error() { return last_error.c_str(); }
 
 void* nr_create(const char* config_path) {
@@ -78,6 +88,9 @@ void* nr_create(const char* config_path) {
     const auto config = Ramulator::Config::parse_config_file(config_path);
     auto engine = std::make_unique<Engine>();
     engine->frontend.reset(Ramulator::Factory::create_frontend(config));
+    auto* frontend = dynamic_cast<Ramulator::NeuSimExternal*>(engine->frontend.get());
+    if (!frontend) throw std::runtime_error("Bridge requires the NeuSimExternal frontend");
+    engine->capacity = frontend->get_capacity_bytes();
     engine->memory.reset(Ramulator::Factory::create_memory_system(config));
     engine->frontend->connect_memory_system(engine->memory.get());
     engine->memory->connect_frontend(engine->frontend.get());
@@ -88,11 +101,12 @@ void* nr_create(const char* config_path) {
   return result;
 }
 
-int nr_geometry(void* handle, double* tck_ns, int* transaction_bytes) {
+int nr_geometry(void* handle, double* tck_ns, int* transaction_bytes, uint64_t* capacity_bytes) {
   return checked([&] {
     auto& engine = *static_cast<Engine*>(handle);
     *tck_ns = engine.memory->get_tCK();
     *transaction_bytes = engine.memory->get_tx_bytes();
+    *capacity_bytes = engine.capacity;
   });
 }
 

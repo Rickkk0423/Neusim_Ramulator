@@ -1,9 +1,11 @@
 """Deterministic unit backend for causality; real DRAM tests are separate."""
 
+import random
+
 import pytest
 
 from neusim_ramulator.scheduler import Scheduler
-from neusim_ramulator.workload import Region, Tile
+from neusim_ramulator.workload import Region, Tile, build_plan
 
 
 class UnitMemory:
@@ -119,3 +121,34 @@ def test_bad_dependencies_and_insufficient_sram_rejected():
         Scheduler([tile("a", load_after=("absent",))], [core()], UnitMemory())
     with pytest.raises(ValueError, match="SRAM"):
         Scheduler([tile("a")], [core(1)], UnitMemory())
+
+
+def test_seeded_tight_sram_gemm_chains_make_progress():
+    rng = random.Random(314159)
+    for _ in range(50):
+        count = rng.randrange(1, 4)
+        dims = [rng.choice([4, 8, 12, 16, 24]) for _ in range(count + 1)]
+        cores = [core(100000, rng.randrange(1, 6), rng.randrange(1, 9))
+                 for _ in range(rng.choice([1, 2]))]
+        config = {
+            "schema_version": 1, "cores": cores,
+            "workload": {
+                "batch_size": rng.randrange(1, 3), "microbatch_size": 1,
+                "rows_per_sample": rng.choice([4, 8, 12]), "steps": 1,
+                "tile": [rng.choice([4, 8]), rng.choice([4, 8, 12]), rng.choice([4, 8, 12])],
+                "stages": [{"name": str(j), "core": rng.randrange(len(cores)),
+                            "k": dims[j], "n": dims[j + 1]} for j in range(count)],
+            },
+        }
+        tiles, _ = build_plan(config)
+        for index, spec in enumerate(cores):
+            required = max((t.input_bytes + t.accumulator_bytes
+                            for t in tiles if t.core == index), default=128)
+            spec["sram_bytes"] = required + rng.randrange(max(1, required // 2))
+        scheduler = Scheduler(tiles, cores, UnitMemory(latency=2, slots=8), max_cycles=8000)
+        report = scheduler.run()
+        assert all(c["peak_sram_bytes"] <= c["sram_capacity_bytes"] for c in report["cores"])
+        for task in scheduler.tasks:
+            assert task.ready <= task.start < task.end <= task.done
+            assert all(scheduler.lookup[d].done <= task.admitted for d in task.tile.load_after)
+            assert all(scheduler.lookup[d].end <= task.start for d in task.tile.compute_after)

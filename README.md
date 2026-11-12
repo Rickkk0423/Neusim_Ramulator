@@ -22,6 +22,10 @@ No bandwidth is statically assigned to a core.
 - Multiple microbatches and sequential repeated steps run on the same timeline.
 - DDR4, HBM2, and HBM3 use official Ramulator devices, controllers, and timings.
 
+This is an architecture exploration model, not a hardware-calibrated simulator.
+See [docs/STATUS.md](docs/STATUS.md) for the implementation audit, current boundaries,
+and improvement priorities.
+
 **Current workload frontend:** chains of dense GEMMs, including tail tiles, pipeline
 stages, microbatches, and repeated steps. The DiT-like example is an expand/contract
 GEMM workload for memory experiments, **not a complete DiT implementation**. Attention,
@@ -103,6 +107,11 @@ request interface and reporting the actual core count. Upstream's `External`
 frontend reports one core, which is insufficient for its controllers' per-source
 statistics arrays when injecting multiple source IDs. Source IDs are bounds-checked
 by the adapter; the official memory/controller implementations are unchanged.
+The adapter also rejects requests outside the configured addressable DRAM capacity.
+Capacity is derived from the resolved organization, transaction size, and prefetch
+factor, including pseudochannels. A workload that exceeds it fails explicitly
+instead of silently wrapping the address mapping. There is no DRAM allocator reuse
+between stages, microbatches, or steps yet.
 
 ## Configuration
 
@@ -152,6 +161,11 @@ precision-dependent throughput: NeuSim's compute abstraction does not model that
 - `config.json`, `dram.yaml`: the input and fully expanded DRAM configuration.
 - `error.json`: a failure diagnostic if execution fails after output initialization.
 
+Rerunning in one output directory removes prior simulator-owned report files first,
+including an old `requests.csv` when tracing is disabled. Unrelated files are kept.
+Source revisions and tracked working-tree dirty flags are recorded separately;
+a dirty flag means the revision alone is not enough to reproduce that run.
+
 Bandwidth is accepted interface-transaction bytes / whole-run makespan (decimal GB/s).
 It is effective interface throughput, not necessarily physical DRAM-bus throughput:
 the controller may forward reads or coalesce writes. Official command-service
@@ -189,6 +203,9 @@ latency analysis; there is no claim that a short run has reached steady state.
 7. Current execution is cycle-stepped on the DRAM side and scans planned tiles.
    This first release prioritizes correctness and inspectability over million-point
    DSE throughput. Small/representative workloads are the intended starting point.
+8. `cycles` means Ramulator model ticks. In particular, the pinned HBM3 model uses
+   half-CK ticks. Nanoseconds use its returned tick period, not an assumed DRAM CK.
+   `issue_width` is therefore requests per model tick, not per accelerator clock.
 
 ## Tests and Reproducibility
 

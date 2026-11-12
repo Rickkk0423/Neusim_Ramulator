@@ -16,7 +16,3 @@ jobs:
       - run: python -m pytest -q
       - run: python -m neusim_ramulator.cli examples/four_core_hbm.json -o results/hbm
       - run: python -m neusim_ramulator.cli examples/dit_like_batch.json -o results/dit
-      - uses: actions/upload-artifact@v4
-        with:
-          name: simulation-reports
-          path: results/
