@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "dram": {"standard": "DDR4", "channels": 1},
+  "simulation": {"issue_width": 4, "max_cycles": 2000000},
+  "cores": [
+    {"sram_bytes": 65536, "prefetch_tiles": 3, "max_outstanding": 32,
+     "chip": {"num_sa": 1, "num_vu": 1, "sa_dim": 16, "freq_GHz": 1.0}},
+    {"sram_bytes": 65536, "prefetch_tiles": 3, "max_outstanding": 32,
+     "chip": {"num_sa": 1, "num_vu": 1, "sa_dim": 16, "freq_GHz": 1.0}}
+  ],
+  "workload": {
+    "batch_size": 3, "microbatch_size": 1, "rows_per_sample": 64, "steps": 1,
+    "dtype": "BFLOAT16", "accumulator_bytes": 4, "tile": [32, 64, 64],
+    "stages": [
+      {"name": "projection", "core": 0, "k": 128, "n": 128},
+      {"name": "ffn", "core": 1, "k": 128, "n": 128}
+    ]
+  }
+}

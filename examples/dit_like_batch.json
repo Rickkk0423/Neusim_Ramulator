@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "dram": {"standard": "HBM2", "channels": 4},
+  "simulation": {"issue_width": 8, "max_cycles": 5000000},
+  "cores": [
+    {"sram_bytes": 131072, "prefetch_tiles": 3, "max_outstanding": 64,
+     "chip": {"num_sa": 2, "num_vu": 2, "sa_dim": 32, "freq_GHz": 1.0}},
+    {"sram_bytes": 131072, "prefetch_tiles": 3, "max_outstanding": 64,
+     "chip": {"num_sa": 2, "num_vu": 2, "sa_dim": 32, "freq_GHz": 1.0}}
+  ],
+  "workload": {
+    "batch_size": 4, "microbatch_size": 2, "rows_per_sample": 64, "steps": 3,
+    "dtype": "BFLOAT16", "accumulator_bytes": 4, "tile": [32, 64, 64],
+    "stages": [
+      {"name": "expand", "core": 0, "k": 128, "n": 256},
+      {"name": "contract", "core": 1, "k": 256, "n": 128}
+    ]
+  }
+}

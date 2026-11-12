@@ -1,0 +1,14 @@
+NeuSim + Ramulator integration
+Copyright 2026 Neusim_Ramulator contributors
+
+This repository contains integration code and Git submodule references to:
+
+NeuSim, platformxlab/NeuSim, Apache License 2.0.
+https://github.com/platformxlab/NeuSim
+
+Ramulator2, CMU-SAFARI/ramulator2. See third_party/ramulator2/LICENSE.
+https://github.com/CMU-SAFARI/ramulator2
+
+No upstream source is vendored into the integration package or claimed as original
+integration code. Submodule sources and their dependencies retain their own notices.
+The build-local param.h compatibility overlay is documented in CMakeLists.txt.
