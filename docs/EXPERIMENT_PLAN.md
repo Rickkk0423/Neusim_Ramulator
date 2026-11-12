@@ -4,6 +4,11 @@ Scope: pi0.5 only. No cross-architecture calibration, static DRAM bandwidth shar
 SRAM-bank model, or results from other models. Every CPU/memory-intensive task on
 Deep-space goes through Slurm with explicit CPU, RAM and wall-time limits.
 
+Status on 2026-11-13: Gate A implemented, 80 tests passed. Gate B has bounded
+full-shape profiles and a complete real-width one-layer/one-step expert component;
+full-size end-to-end pi0.5 has not completed. Gates C-E have not been run.
+Detailed evidence and reproducibility hashes are in `VALIDATION.md`.
+
 ## Research Questions
 
 1. When does timestep pipelining improve throughput after shared DRAM interference?
